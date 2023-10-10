@@ -1,5 +1,6 @@
 import { NewProduct } from "../type";
 import productSchema from "../models/products.model";
+import boom from "@hapi/boom";
 
 export const getProducts = (skip: number, limit: number, filter: Object) => {
   return productSchema
@@ -8,7 +9,9 @@ export const getProducts = (skip: number, limit: number, filter: Object) => {
     .skip(skip)
     .limit(limit)
     .then((data) => data)
-    .catch((error) => console.error("ERROR getProducts", error));
+    .catch((error) => {
+      throw new Error(error);
+    });
 };
 
 export const getById = async (id: string, skip: number, limit: number) => {
@@ -19,7 +22,10 @@ export const getById = async (id: string, skip: number, limit: number) => {
 export const saveProduct = async (newProductEntry: NewProduct) => {
   const newProduct = new productSchema({
     ...newProductEntry,
-    change_log: {},
+    change_log: [{
+      price: newProductEntry.price,
+      stock: newProductEntry.stock,
+    }],
   });
 
   return newProduct
@@ -28,52 +34,39 @@ export const saveProduct = async (newProductEntry: NewProduct) => {
       return data;
     })
     .catch((error) => {
-      console.error("Error al guardar el producto:", error);
+      throw new Error(error);
     });
 };
 
 export const updateProduct = (productEntry: NewProduct, id: string) => {
   return productSchema
-  .findByIdAndUpdate(id, { ...productEntry })
-  .then((data) => {
-    if (data) {
-      return data;
-    }
-    return [];
-  })
-  .catch((error) => {
-    console.error("Error al actualizar el producto:", error);
-  });
+    .findById(id)
+    .then((data): any => {
+      if (!data) {
+        return boom.notFound("Producto no encontrado");
+      }
+      const dataUpdate = { ...productEntry, change_log: data.change_log };
+      const lastChange = data.change_log[data.change_log.length - 1];
 
-  // return productSchema
-  //   .findById(id)
-  //   .then((data: any) => {
-  //     if (productEntry.price !== data.price) {
-  //       console.log("ENTREEEEE");
-  //       productEntry.change_log?.push({
-  //         price: productEntry.price,
-  //         stock: productEntry.stock,
-  //         timestamp: Date.now(),
-  //       });
+      if (lastChange?.price !== dataUpdate.price || lastChange?.stock !== dataUpdate.stock) {
+        dataUpdate.change_log.push({
+          price: productEntry.price,
+          stock: productEntry.stock,
+          timestamp: new Date(),
+        });
+      }
 
-  //       console.log("productEntry", productEntry);
-  //     }
-
-  //     return productSchema
-  //       .findByIdAndUpdate(id, { ...productEntry })
-  //       .then((data) => {
-  //         if (data) {
-  //           return data;
-  //         }
-  //         return [];
-  //       })
-  //       .catch((error) => {
-  //         console.error("Error al actualizar el producto:", error);
-  //       });
-  //   })
-  //   .catch((error) => {
-  //     console.error("Error al actualizar el producto:", error);
-  //   });
+      return productSchema.updateOne({ _id: id }, { ...dataUpdate })
+        .then(() => {
+          return dataUpdate;
+        })
+        .catch((error) => {
+          throw new Error(error);
+        });
+    })
+    .catch((error) => {
+      throw new Error(error);
+    });
 };
 
 export const deleteProduct = (id: string) => {
@@ -86,7 +79,7 @@ export const deleteProduct = (id: string) => {
       return null;
     })
     .catch((error) => {
-      console.error("Error al eliminar el producto:", error);
+      throw new Error(error);
     });
 };
 
@@ -100,6 +93,6 @@ export const countProducts = () => {
       return null;
     })
     .catch((error) => {
-      console.error("Error al obtener el total de productos:", error);
+      throw new Error(error);
     });
 };
